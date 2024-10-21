@@ -70,21 +70,20 @@ class MultiHeadAttentionBlock(nn.Module):
         assert d_model % h == 0, "d_model is not divisible by h"
 
         self.d_k = d_model // h
-        self.w_q = nn.Linear(d_model, d_model)
-        self.w_k = nn.Linear(d_model, d_model)
-        self.w_v = nn.Linear(d_model, d_model)
-
-        self.w_o = nn.Linear(d_model, d_model)
+        self.w_q = nn.Linear(d_model, d_model, bias=False)
+        self.w_k = nn.Linear(d_model, d_model, bias=False)
+        self.w_v = nn.Linear(d_model, d_model, bias=False)
+        self.w_o = nn.Linear(d_model, d_model, bias=False)
         self.dropout = nn.Dropout(dropout)
     
     @staticmethod
     def attention(query, key, value, mask, dropout: nn.Dropout):
         d_k = query.shape[-1]
 
-        attention_scores = (query @ key.transpose(-2, 1) / math.sqrt(d_k))
+        attention_scores = (query @ key.transpose(-2, -1)) / math.sqrt(d_k)
         if mask is not None:
-            attention_scores.masked_fill(mask == 0, -1e9)
-        attention_scores = attention_scores.softmax(dim= -1)
+            attention_scores.masked_fill_(mask == 0, -1e9)
+        attention_scores = attention_scores.softmax(dim=-1)
         if dropout is not None:
             attention_scores = dropout(attention_scores)
 
@@ -96,7 +95,7 @@ class MultiHeadAttentionBlock(nn.Module):
         value = self.w_v(v)
 
         query = query.view(query.shape[0], query.shape[1], self.h, self.d_k).transpose(1, 2)
-        key = query.view(key.shape[0], key.shape[1], self.h, self.d_k).transpose(1, 2)
+        key = key.view(key.shape[0], key.shape[1], self.h, self.d_k).transpose(1, 2)
         value = value.view(value.shape[0], value.shape[1], self.h, self.d_k).transpose(1, 2)
 
         x, self.attention_scores = MultiHeadAttentionBlock.attention(query, key, value, mask, self.dropout)
@@ -189,14 +188,14 @@ class Transformer(nn.Module):
     def encode(self, src, src_mask):
         src = self.src_embeding(src)
         src = self.src_pos(src)
-        return self.encode(src, src_mask)
+        return self.encoder(src, src_mask)
     
     def decode(self, encoder_output, src_mask, tgt, tgt_mask):
         tgt = self.tgt_embeding(tgt)
         tgt = self.tgt_pos(tgt)
-        return self.decode(tgt, encoder_output, src_mask, tgt_mask)
+        return self.decoder(tgt, encoder_output, src_mask, tgt_mask)
 
-    def Project(self, x):
+    def project(self, x):
         return self.projection_layer(x)
     
 
